@@ -14,6 +14,11 @@ pub fn unpack25519(mut out: FieldElem, iin: &[u8]) {
     out[15] &= 0x7fff;
 }
 
+// Inspect the field element by examining each element in the array. 
+// Each element is shifted right by 16 bits to check if there is a carry.
+// If there is a carry, the carry is subtracted from the current element
+// and added to the next element. If the current element is the last element,
+// the carry is multiplied by 38 (19 * 2) and added to the first element.
 pub fn carry25519(mut elem: FieldElem) {
     let mut carry: i64;
     for i in 0..16 {
