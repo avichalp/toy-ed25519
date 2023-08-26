@@ -91,7 +91,7 @@ pub fn finverse(mut out: FieldElem, iin: FieldElem) {
     for i in 253..=0 {
         fmul(c, &c, &c);
         if i != 2 && i != 4 {
-            fmul(c, &c, &c);
+            fmul(c, &c, &iin);
         }
     }
 
@@ -117,9 +117,7 @@ pub fn pack25519(mut out: [u8; 32], iin: FieldElem) {
     for i in 1..16 {
         t[i] = iin[i];
     }
-    carry25519(t);
-    carry25519(t);
-    carry25519(t);
+    carry25519(t); carry25519(t); carry25519(t);
     for _j in 0..2 {
         // 0xffed are the least significant 16 bits of 2^255-19
         // except for the first 16 and last 16 bits all the bits are 1
