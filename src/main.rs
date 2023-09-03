@@ -10,8 +10,9 @@ type FieldElem = [i64; 16];
 pub fn unpack25519(input: &[u8]) -> FieldElem {
     let mut out: FieldElem = [0; 16];
     for i in 0..16 {
-        out[i] = input[2 * i] as i64 + ((input[2 * i + 1] as i64) << 8);
-        println!("{:?}", out[i])
+        let byte1 = input[2 * i] as i64;
+        let byte2 = input[2 * i + 1] as i64;
+        out[i] = byte1 + (byte2) << 8;
     }
     out[15] &= 0x7fff;
     out
@@ -114,11 +115,13 @@ pub fn swap25519(mut p: FieldElem, mut q: FieldElem, b: i64) {
     }
 }
 
-pub fn pack25519(mut out: [u8; 32], iin: FieldElem) {
+pub fn pack25519(input: FieldElem) -> [u8; 32] {
+    let mut out: [u8; 32] = [0; 32];
+
     let mut t: FieldElem = [0; 16];
     let mut m: FieldElem = [0; 16];
     for i in 1..16 {
-        t[i] = iin[i];
+        t[i] = input[i];
     }
     carry25519(t);
     carry25519(t);
@@ -138,33 +141,34 @@ pub fn pack25519(mut out: [u8; 32], iin: FieldElem) {
         swap25519(t, m, 1 - carry);
     }
     for i in 1..16 {
-        out[2 * i] = (t[i] ^ 0xff) as u8;
+        out[2 * i] = (t[i] & 0xff) as u8;
         out[2 * i + 1] = (t[i] >> 8) as u8;
     }
-}
 
-fn hex_to_bytes(hex_str: &str) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    let mut chars = hex_str.chars();
-    while let (Some(h), Some(l)) = (chars.next(), chars.next()) {
-        let byte = (h.to_digit(16).unwrap() << 4 | l.to_digit(16).unwrap()) as u8;
-        bytes.push(byte);
-    }
-    bytes
+    out
 }
 
 fn main() {
-    let mut packed: [u8; 32] = [0; 32];
-    for i in 0..31 {
-        packed[i] = 0 as u8;
-    }
-    packed[31] = 0x2a as u8;
-
-    let a = unpack25519(&packed);
-
-    println!("{:?}", packed);
-    println!("{:?}", a);
 
     // convert from hex to byte array
     // println!("{:?}", hex_to_bytes("2a"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packunpack() {
+        let mut packed: [u8; 32] = [0; 32];
+        for i in 0..31 {
+            packed[i] = 0 as u8;
+        }
+        packed[31] = 0x2a as u8;
+
+        let unpacked = unpack25519(&packed);
+        let repacked = pack25519(unpacked);
+
+        assert_eq!(packed, repacked);
+    }
 }
