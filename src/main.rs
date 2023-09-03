@@ -7,11 +7,14 @@ type FieldElem = [i64; 16];
 // always less than 2^255 (2^255-19, but we allow [2^255-19, 2^255-1]).
 // We could have used u16 instead of i64 theorectically, i64 prevents
 // any possible overflow/underflow.
-pub fn unpack25519(mut out: FieldElem, iin: &[u8]) {
+pub fn unpack25519(input: &[u8]) -> FieldElem {
+    let mut out: FieldElem = [0; 16];
     for i in 0..16 {
-        out[i] = iin[2 * i] as i64 + ((iin[2 * i + 1] as i64) << 8);
+        out[i] = input[2 * i] as i64 + ((input[2 * i + 1] as i64) << 8);
+        println!("{:?}", out[i])
     }
     out[15] &= 0x7fff;
+    out
 }
 
 // Inspect the field element by examining each element in the array.
@@ -117,7 +120,9 @@ pub fn pack25519(mut out: [u8; 32], iin: FieldElem) {
     for i in 1..16 {
         t[i] = iin[i];
     }
-    carry25519(t); carry25519(t); carry25519(t);
+    carry25519(t);
+    carry25519(t);
+    carry25519(t);
     for _j in 0..2 {
         // 0xffed are the least significant 16 bits of 2^255-19
         // except for the first 16 and last 16 bits all the bits are 1
@@ -138,6 +143,28 @@ pub fn pack25519(mut out: [u8; 32], iin: FieldElem) {
     }
 }
 
+fn hex_to_bytes(hex_str: &str) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut chars = hex_str.chars();
+    while let (Some(h), Some(l)) = (chars.next(), chars.next()) {
+        let byte = (h.to_digit(16).unwrap() << 4 | l.to_digit(16).unwrap()) as u8;
+        bytes.push(byte);
+    }
+    bytes
+}
+
 fn main() {
-    println!("{:?}", FieldElem::default());
+    let mut packed: [u8; 32] = [0; 32];
+    for i in 0..31 {
+        packed[i] = 0 as u8;
+    }
+    packed[31] = 0x2a as u8;
+
+    let a = unpack25519(&packed);
+
+    println!("{:?}", packed);
+    println!("{:?}", a);
+
+    // convert from hex to byte array
+    // println!("{:?}", hex_to_bytes("2a"))
 }
