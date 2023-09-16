@@ -1,4 +1,137 @@
+use std::i64;
+
 type FieldElem = [i64; 16];
+
+#[derive(Debug, Clone, PartialEq)]
+struct FieldElement<T, const SIZE: usize> {
+    items: [T; SIZE],
+}
+
+impl<T, const SIZE: usize> FieldElement<T, SIZE> {
+    fn len(&self) -> usize {
+        SIZE
+    }
+}
+
+impl FieldElement<u8, 32> {
+    fn new(items: [u8; 32]) -> Self {
+        Self { items }
+    }
+
+    fn unpack(&self) -> FieldElement<i64, 16> {
+        let mut unpacked = FieldElement { items: [0; 16] };
+        for i in 0..16 {
+            let byte1 = self.items[2 * i] as i64;
+            let byte2 = self.items[(2 * i) + 1] as i64;
+            unpacked.items[i] = (byte2 << 8) + byte1;
+        }
+        unpacked.items[15] = unpacked.items[15] & 0x7fff;
+        unpacked
+    }
+}
+
+impl FieldElement<i64, 16> {
+    fn add(&self, other: &Self) -> Self {
+        let mut result = Self { items: [0; 16] };
+        for i in 0..16 {
+            result.items[i] = self.items[i] + other.items[i];
+        }
+        result
+    }
+
+    fn sub(&self, other: &Self) -> Self {
+        let mut result = Self { items: [0; 16] };
+        for i in 0..16 {
+            result.items[i] = self.items[i] - other.items[i];
+        }
+        result
+    }
+
+    fn mul(&self, other: &Self) -> Self {
+        // todo: impl a `product` method for [i64; 32]
+        let mut product: [i64; 32] = [0; 32];
+        for i in 0..16 {
+            for j in 0..16 {
+                product[i + j] += self.items[i] * other.items[j];
+            }
+        }
+        for i in 0..15 {
+            product[i] += 38 * product[i + 16];
+        }
+
+        let mut result = Self { items: [0; 16] };
+        for i in 0..16 {
+            result.items[i] = product[i];
+        }
+        result.carry();
+        result.carry();
+        result
+    }
+
+    fn inverse(&self) -> Self {
+        // println!("mod inversing");
+        let mut temp = self.clone();
+        // let mut result = self.clone();
+        for i in (0..=253).rev() {
+            // println!("temp == {:?}, {:?}", temp, i);
+            temp = temp.mul(&temp);
+            if i != 2 && i != 4 {
+                temp = temp.mul(&self);
+            }
+        }
+        temp
+    }
+
+    fn swap(&mut self, other: &mut Self, b: i64) {
+        let c = !(b - 1);
+        for i in 0..16 {
+            let t = c & (self.items[i] ^ other.items[i]);
+            self.items[i] ^= t;
+            other.items[i] ^= t;
+        }
+    }
+
+    fn carry(&mut self) {
+        for i in 0..16 {
+            let carry = self.items[i] >> 16; // 1. divide by 2^16
+            self.items[i] -= carry << 16; // 2. multiply by 2^16 and subtract
+            if i < 15 {
+                self.items[i + 1] += carry;
+            } else {
+                self.items[0] += 38 * carry;
+            }
+        }
+    }
+
+    fn pack(&mut self) -> FieldElement<u8, 32> {
+        let mut temp = Self { items: [0; 16] };
+        self.carry();
+        self.carry();
+        self.carry();
+        for _ in 0..2 {
+            // 0xffed are the least significant 16 bits of 2^255-19
+            // except for the first 16 and last 16 bits all the bits are 1
+            temp.items[0] = self.items[0] - 0xffed;
+            for i in 1..15 {
+                temp.items[i] = self.items[i] - 0xffff - ((temp.items[i - 1] >> 16) & 1);
+                temp.items[i - 1] &= 0xffff;
+            }
+            // 0x7fff are the most significant 16 bits of 2^255-19
+            temp.items[15] = self.items[15] - 0x7fff - ((temp.items[14] >> 16) & 1);
+            let carry = (temp.items[15] >> 16) & 1;
+            temp.items[14] &= 0xffff;
+            self.swap(&mut temp, 1 - carry);
+        }
+
+        let mut result = FieldElement { items: [0; 32] };
+        for i in 0..16 {
+            result.items[2 * i] = (self.items[i] & 0xff) as u8;
+            result.items[(2 * i) + 1] = (self.items[i] >> 8) as u8;
+        }
+
+        result
+    }
+}
 
 // Takes a 32-byte array and unpacks it into a FieldElem
 // by combining every two adjacent bytes together by
@@ -11,10 +144,10 @@ pub fn unpack25519(input: &[u8]) -> FieldElem {
     let mut out: FieldElem = [0; 16];
     for i in 0..16 {
         let byte1 = input[2 * i] as i64;
-        let byte2 = input[2 * i + 1] as i64;
-        out[i] = byte1 + (byte2) << 8;
+        let byte2 = input[(2 * i) + 1] as i64;
+        out[i] = (byte2 << 8) + byte1;
     }
-    out[15] &= 0x7fff;
+    out[15] = out[15] & 0x7fff;
     out
 }
 
@@ -23,11 +156,10 @@ pub fn unpack25519(input: &[u8]) -> FieldElem {
 // If there is a carry, the carry is subtracted from the current element
 // and added to the next element. If the current element is the last element,
 // the carry is multiplied by 38 (19 * 2) and added to the first element.
-pub fn carry25519(mut elem: FieldElem) {
-    let mut carry: i64;
+pub fn carry25519(elem: &mut FieldElem) {
     for i in 0..16 {
-        carry = elem[i] >> 16;
-        elem[i] -= carry << 16;
+        let carry = elem[i] >> 16; // 1. divide by 2^16
+        elem[i] -= carry << 16; // 2. multiply by 2^16 and subtract
         if i < 15 {
             elem[i + 1] += carry;
         } else {
@@ -36,39 +168,39 @@ pub fn carry25519(mut elem: FieldElem) {
     }
 }
 
-pub fn fadd(mut out: FieldElem, a: &FieldElem, b: &FieldElem) {
+pub fn fadd(a: &FieldElem, b: &FieldElem) -> FieldElem {
+    let mut out: FieldElem = [0; 16];
     for i in 0..16 {
         out[i] = a[i] + b[i];
     }
+    out
 }
 
-pub fn fsub(mut out: FieldElem, a: &FieldElem, b: &FieldElem) {
+pub fn fsub(a: &FieldElem, b: &FieldElem) -> FieldElem {
+    let mut out: FieldElem = [0; 16];
     for i in 0..16 {
         out[i] = a[i] - b[i];
     }
+    out
 }
 
-pub fn fmul(mut out: FieldElem, a: &FieldElem, b: &FieldElem) {
+pub fn fmul(a: &FieldElem, b: &FieldElem) -> FieldElem {
     let mut product: [i64; 32] = [0; 32];
-    for i in 0..32 {
-        product[i] = 0;
-    }
-
     for i in 0..16 {
         for j in 0..16 {
             product[i + j] += a[i] * b[j];
         }
     }
-
     for i in 0..15 {
         product[i] += 38 * product[i + 16];
     }
 
-    for i in 0..16 {
-        out[i] = product[i];
-    }
-    carry25519(out);
-    carry25519(out);
+    println!("product == {:?}", product);
+
+    let mut result = product[0..16].try_into().unwrap();
+    carry25519(&mut result);
+    carry25519(&mut result);
+    result
 }
 
 // To find the inverse of a FieldElem we use Fermat's Little Theorem.
@@ -87,26 +219,28 @@ pub fn fmul(mut out: FieldElem, a: &FieldElem, b: &FieldElem) {
 // at bit 253 and save one iteration by initialising c to in instead of 1.
 // At the end, c is copied to the output variable out.
 pub fn finverse(mut out: FieldElem, iin: FieldElem) {
-    let mut c: FieldElem = [0; 16];
+    let mut result: FieldElem = [0; 16];
     for i in 0..16 {
-        c[i] = iin[i];
+        result[i] = iin[i];
     }
 
     for i in 253..=0 {
-        fmul(c, &c, &c);
+        result = fmul(&result, &result);
         if i != 2 && i != 4 {
-            fmul(c, &c, &iin);
+            result = fmul(&result, &iin);
         }
     }
 
+    println!("result == {:?}", result);
+
     for i in 0..16 {
-        out[i] = c[i];
+        out[i] = result[i];
     }
 }
 
 // If b is 1 and bits in p and q differ, swap the bits in p and q.
 // If b is 0, do nothing. If the bits are the same, do nothing.
-pub fn swap25519(mut p: FieldElem, mut q: FieldElem, b: i64) {
+pub fn swap25519(p: &mut FieldElem, q: &mut FieldElem, b: i64) {
     let c = !(b - 1);
     for i in 0..16 {
         let t = c & (p[i] ^ q[i]);
@@ -115,43 +249,81 @@ pub fn swap25519(mut p: FieldElem, mut q: FieldElem, b: i64) {
     }
 }
 
-pub fn pack25519(input: FieldElem) -> [u8; 32] {
-    let mut out: [u8; 32] = [0; 32];
-
-    let mut t: FieldElem = [0; 16];
+pub fn pack25519(input: &mut FieldElem) -> [u8; 32] {
     let mut m: FieldElem = [0; 16];
-    for i in 1..16 {
-        t[i] = input[i];
-    }
-    carry25519(t);
-    carry25519(t);
-    carry25519(t);
-    for _j in 0..2 {
+    carry25519(input);
+    carry25519(input);
+    carry25519(input);
+    for _ in 0..2 {
         // 0xffed are the least significant 16 bits of 2^255-19
         // except for the first 16 and last 16 bits all the bits are 1
-        m[0] = t[0] - 0xffed;
+        m[0] = input[0] - 0xffed;
         for i in 1..15 {
-            m[i] = t[i] - 0xffff - ((m[i - 1]) & 1);
+            m[i] = input[i] - 0xffff - ((m[i - 1] >> 16) & 1);
             m[i - 1] &= 0xffff;
         }
         // 0x7fff are the most significant 16 bits of 2^255-19
-        m[15] = t[15] - 0x7ffff - ((m[14]) & 1);
+        m[15] = input[15] - 0x7fff - ((m[14] >> 16) & 1);
         let carry = (m[15] >> 16) & 1;
         m[14] &= 0xffff;
-        swap25519(t, m, 1 - carry);
+        swap25519(input, &mut m, 1 - carry);
     }
-    for i in 1..16 {
-        out[2 * i] = (t[i] & 0xff) as u8;
-        out[2 * i + 1] = (t[i] >> 8) as u8;
+
+    let mut out: [u8; 32] = [0; 32];
+    println!("pre packed == {:?}", input);
+    for i in 0..16 {
+        out[2 * i] = (input[i] & 0xff) as u8;
+        out[(2 * i) + 1] = (input[i] >> 8) as u8;
     }
 
     out
 }
 
 fn main() {
+    let mut fe1 = FieldElement::new([0; 32]);
+    fe1.items[0] = 0x02 as u8;
+    println!("fe {:?}", fe1);
+    let unpacked_fe1 = fe1.unpack();
+    println!("unpacked {:?}", unpacked_fe1);
 
-    // convert from hex to byte array
-    // println!("{:?}", hex_to_bytes("2a"))
+    /* let mut fe2 = FieldElement::new([0; 32]);
+       fe2.items[0] = 0x03 as u8;
+       println!("fe {:?}", fe2);
+       let unpacked_fe2 = fe2.unpack();
+       println!("unpacked {:?}", unpacked_fe2);
+
+       let mut fe3 = unpacked_fe1.mul(&unpacked_fe2);
+       println!("fe3 {:?}", fe3);
+       let packed_fe3 = fe3.pack();
+       println!("packed fe3 {:?}", packed_fe3);
+    */
+    let mut fe4 = unpacked_fe1.inverse();
+    println!("fe4 {:?}", fe4);
+    let packed_fe4 = fe4.pack();
+    println!("packed fe4 {:?}", packed_fe4);
+
+    /* let mut packed_a: [u8; 32] = [0; 32];
+       packed_a[0] = 0x02 as u8;
+
+       let mut packed_b: [u8; 32] = [0; 32];
+       packed_b[0] = 0x03 as u8;
+    */
+    // let unpacked_a = unpack25519(&packed_a);
+    // let unpacked_b = unpack25519(&packed_b);
+    // println!("unpacked a {:?}", unpacked_a);
+    // println!("unpacked b {:?}", unpacked_b);
+    // let unpacked_c = unpack25519(&packed_c);
+
+    // let mut out = fmul(&unpacked_a, &unpacked_b);
+    // let out: [u8; 32] = [0; 32];
+    // let unpacked_out = unpack25519(&out);
+
+    // finverse(unpacked_out, unpacked_b);
+    // println!("unpacked out (inverse) {:?}", unpacked_out);
+
+    // println!("{:?}", pack25519(&mut out));
+    // println!("{:?}", unpack25519(&pack25519(out)));
+    // println!("{:?}", pack25519(fadd(&unpacked_b, &unpacked_b)));
 }
 
 #[cfg(test)]
@@ -160,15 +332,45 @@ mod tests {
 
     #[test]
     fn packunpack() {
-        let mut packed: [u8; 32] = [0; 32];
-        for i in 0..31 {
-            packed[i] = 0 as u8;
-        }
-        packed[31] = 0x2a as u8;
+        let mut packed = FieldElement { items: [0; 32] };
+        packed.items[31] = 0x2a as u8;
+        let mut unpacked = packed.unpack();
 
-        let unpacked = unpack25519(&packed);
-        let repacked = pack25519(unpacked);
+        let repacked = unpacked.pack();
 
         assert_eq!(packed, repacked);
+    }
+
+    #[test]
+    fn addsub() {
+        let mut packed_a = FieldElement { items: [0; 32] };
+        packed_a.items[31] = 0x15 as u8;
+
+        let mut packed_b = FieldElement { items: [0; 32] };
+        packed_b.items[31] = 0x15 as u8;
+
+        let unpacked_a = packed_a.unpack();
+        let unpacked_b = packed_b.unpack();
+        let unpacked_c = unpacked_a.add(&unpacked_b);
+
+        assert_eq!(unpacked_a, unpacked_c.sub(&unpacked_b));
+    }
+
+    #[test]
+    fn mul() {
+        let mut packed_a = FieldElement { items: [0; 32] };
+        packed_a.items[0] = 0x2 as u8;
+
+        let mut packed_b = FieldElement { items: [0; 32] };
+        packed_b.items[0] = 0x3 as u8;
+
+        let unpacked_a = packed_a.unpack();
+        let unpacked_b = packed_b.unpack();
+        let mut unpacked_c = unpacked_a.mul(&unpacked_b);
+
+        let mut expected_packed: FieldElement<u8, 32> = FieldElement { items: [0; 32] };
+        expected_packed.items[0] = 0x6;
+
+        assert_eq!(expected_packed, unpacked_c.pack());
     }
 }
