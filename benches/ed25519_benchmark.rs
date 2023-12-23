@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use ed25519::FieldElement;
+use ed25519::field::FieldElement;
 
 fn bench_inverse(c: &mut Criterion) {
     let mut items = [0; 32];
@@ -9,9 +9,13 @@ fn bench_inverse(c: &mut Criterion) {
     // in [0,2^255] (see unpack docs)
     items[31] = 0x2;
     let packed = FieldElement::new(items);
-    let unpacked = packed.unpack();
+    let mut unpacked = packed.unpack();
 
-    c.bench_function("inverse", |b| b.iter(|| unpacked.inverse()));
+    c.bench_function("inverse", |b| {
+        b.iter(|| {
+            unpacked.inverse();
+        })
+    });
 }
 
 fn bench_add(c: &mut Criterion) {
@@ -23,10 +27,14 @@ fn bench_add(c: &mut Criterion) {
     b[31] = 0x2;
     let packed_b = FieldElement::new(b);
 
-    let unpacked_a = packed_a.unpack();
+    let mut unpacked_a = packed_a.unpack();
     let unpacked_b = packed_b.unpack();
 
-    c.bench_function("add", |b| b.iter(|| unpacked_a.add(&unpacked_b)));
+    c.bench_function("add", |b| {
+        b.iter(|| {
+            unpacked_a.add(&unpacked_b);
+        })
+    });
 }
 
 fn bench_mul(c: &mut Criterion) {
@@ -38,10 +46,14 @@ fn bench_mul(c: &mut Criterion) {
     b[31] = 0x2;
     let packed_b = FieldElement::new(b);
 
-    let unpacked_a = packed_a.unpack();
+    let mut unpacked_a = packed_a.unpack();
     let unpacked_b = packed_b.unpack();
 
-    c.bench_function("mul", |b| b.iter(|| unpacked_a.mul(&unpacked_b)));
+    c.bench_function("mul", |b| {
+        b.iter(|| {
+            unpacked_a.mul(&unpacked_b);
+        })
+    });
 }
 
 fn bench_sub(c: &mut Criterion) {
@@ -53,10 +65,14 @@ fn bench_sub(c: &mut Criterion) {
     b[31] = 0x2;
     let packed_b = FieldElement::new(b);
 
-    let unpacked_a = packed_a.unpack();
+    let mut unpacked_a = packed_a.unpack();
     let unpacked_b = packed_b.unpack();
 
-    c.bench_function("sub", |b| b.iter(|| unpacked_a.sub(&unpacked_b)));
+    c.bench_function("sub", |b| {
+        b.iter(|| {
+            unpacked_a.sub(&unpacked_b);
+        })
+    });
 }
 
 fn bench_unpack(c: &mut Criterion) {
