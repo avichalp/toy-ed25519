@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use ed25519::field::FieldElement;
+use ed25519::field::Field25519Element;
 
 fn bench_inverse(c: &mut Criterion) {
     let mut items = [0; 32];
@@ -8,7 +8,7 @@ fn bench_inverse(c: &mut Criterion) {
     // p = 2^255-19. we only allow numbers
     // in [0,2^255] (see unpack docs)
     items[31] = 0x2;
-    let packed = FieldElement::new(items);
+    let packed = Field25519Element::new(items);
     let mut unpacked = packed.unpack();
 
     c.bench_function("inverse", |b| {
@@ -21,11 +21,11 @@ fn bench_inverse(c: &mut Criterion) {
 fn bench_add(c: &mut Criterion) {
     let mut a = [0; 32];
     a[31] = 0x2;
-    let packed_a = FieldElement::new(a);
+    let packed_a = Field25519Element::new(a);
 
     let mut b = [0; 32];
     b[31] = 0x2;
-    let packed_b = FieldElement::new(b);
+    let packed_b = Field25519Element::new(b);
 
     let mut unpacked_a = packed_a.unpack();
     let unpacked_b = packed_b.unpack();
@@ -40,11 +40,11 @@ fn bench_add(c: &mut Criterion) {
 fn bench_mul(c: &mut Criterion) {
     let mut a = [0; 32];
     a[31] = 0x2;
-    let packed_a = FieldElement::new(a);
+    let packed_a = Field25519Element::new(a);
 
     let mut b = [0; 32];
     b[31] = 0x2;
-    let packed_b = FieldElement::new(b);
+    let packed_b = Field25519Element::new(b);
 
     let mut unpacked_a = packed_a.unpack();
     let unpacked_b = packed_b.unpack();
@@ -59,11 +59,11 @@ fn bench_mul(c: &mut Criterion) {
 fn bench_sub(c: &mut Criterion) {
     let mut a = [0; 32];
     a[31] = 0x2;
-    let packed_a = FieldElement::new(a);
+    let packed_a = Field25519Element::new(a);
 
     let mut b = [0; 32];
     b[31] = 0x2;
-    let packed_b = FieldElement::new(b);
+    let packed_b = Field25519Element::new(b);
 
     let mut unpacked_a = packed_a.unpack();
     let unpacked_b = packed_b.unpack();
@@ -82,7 +82,7 @@ fn bench_unpack(c: &mut Criterion) {
     // p = 2^255-19. we only allow numbers
     // in [0,2^255] (see unpack docs)
     items[31] = 0x2;
-    let packed = FieldElement::new(items);
+    let packed = Field25519Element::new(items);
 
     c.bench_function("unpack", |b| b.iter(|| packed.unpack()));
 }
@@ -94,7 +94,7 @@ fn bench_pack(c: &mut Criterion) {
     // p = 2^255-19. we only allow numbers
     // in [0,2^255] (see unpack docs)
     items[31] = 0x2;
-    let packed = FieldElement::new(items);
+    let packed = Field25519Element::new(items);
     let mut unpacked = packed.unpack();
 
     c.bench_function("pack", |b| b.iter(|| unpacked.pack()));

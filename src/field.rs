@@ -1,9 +1,9 @@
 #[derive(Debug, Clone)]
-pub struct FieldElement<T, const SIZE: usize> {
+pub struct Field25519Element<T, const SIZE: usize> {
     items: [T; SIZE],
 }
 
-impl<T: Default + Copy, const SIZE: usize> Default for FieldElement<T, SIZE> {
+impl<T: Default + Copy, const SIZE: usize> Default for Field25519Element<T, SIZE> {
     fn default() -> Self {
         Self {
             items: [T::default(); SIZE],
@@ -11,7 +11,7 @@ impl<T: Default + Copy, const SIZE: usize> Default for FieldElement<T, SIZE> {
     }
 }
 
-impl FieldElement<u8, 32> {
+impl Field25519Element<u8, 32> {
     pub fn new(items: [u8; 32]) -> Self {
         Self { items }
     }
@@ -23,8 +23,8 @@ impl FieldElement<u8, 32> {
     // always less than 2^255 (2^255-19, but we allow [2^255-19, 2^255-1]).
     // We could have used u16 instead of i64 theorectically, i64 prevents
     // any possible overflow/underflow.
-    pub fn unpack(&self) -> FieldElement<i64, 16> {
-        let mut unpacked = FieldElement::default();
+    pub fn unpack(&self) -> Field25519Element<i64, 16> {
+        let mut unpacked = Field25519Element::default();
         self.items.chunks(2).enumerate().for_each(|(i, chunk)| {
             unpacked.items[i] = ((chunk[1] as i64) << 8) + chunk[0] as i64;
         });
@@ -33,7 +33,7 @@ impl FieldElement<u8, 32> {
     }
 }
 
-impl FieldElement<i64, 16> {
+impl Field25519Element<i64, 16> {
     pub fn add(&mut self, other: &Self) -> &mut Self {
         for i in 0..16 {
             self.items[i] = self.items[i] + other.items[i];
@@ -129,8 +129,8 @@ impl FieldElement<i64, 16> {
         }
     }
 
-    pub fn pack(&mut self) -> FieldElement<u8, 32> {
-        let mut temp = FieldElement::default();
+    pub fn pack(&mut self) -> Field25519Element<u8, 32> {
+        let mut temp = Field25519Element::default();
         self.carry();
         self.carry();
         self.carry();
@@ -155,7 +155,7 @@ impl FieldElement<i64, 16> {
             self.swap(&mut temp, 1 - carry);
         }
 
-        let mut result = FieldElement::default();
+        let mut result = Field25519Element::default();
         for i in 0..16 {
             result.items[2 * i] = (self.items[i] & 0xff) as u8;
             result.items[(2 * i) + 1] = (self.items[i] >> 8) as u8;
@@ -178,7 +178,7 @@ mod tests {
             // p = 2^255-19. we only allow numbers
             // in [0,2^255] (see unpack docs)
             items[31] = l;
-            let packed = FieldElement { items };
+            let packed = Field25519Element { items };
             let mut unpacked = packed.unpack();
 
             let repacked = unpacked.pack();
@@ -197,11 +197,11 @@ mod tests {
         ) {
             let mut a_items = a;
             a_items[31] = l;
-            let packed_a = FieldElement { items: a_items };
+            let packed_a = Field25519Element { items: a_items };
 
             let mut b_items = b;
             b_items[31] = m;
-            let packed_b = FieldElement { items: b_items };
+            let packed_b = Field25519Element { items: b_items };
 
             let mut unpacked_a = packed_a.unpack();
             let unpacked_b = packed_b.unpack();
@@ -223,7 +223,7 @@ mod tests {
             let mut a_items = a;
             // force last byte to be less than 128
             a_items[31] = l;
-            let packed_a = FieldElement { items: a_items };
+            let packed_a = Field25519Element { items: a_items };
             let mut unpacked_a = packed_a.unpack();
 
             let a_before_inverse = unpacked_a.clone();
@@ -234,7 +234,7 @@ mod tests {
             unpacked_a.mul(&a_before_inverse);
             let packed_a = unpacked_a.pack();
 
-            let mut expected = FieldElement::new([0; 32]);
+            let mut expected = Field25519Element::new([0; 32]);
             expected.items[0] = 1 as u8;
 
             assert_eq!(expected.items, packed_a.items);
